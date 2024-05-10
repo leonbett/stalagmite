@@ -1,0 +1,1 @@
+print("Simply use prettyprint-grammar.py which outputs this information + define tokens")
