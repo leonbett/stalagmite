@@ -16,6 +16,7 @@ def tree_to_str(tree):
     else:
         return '' if is_nt(symbol) else symbol
     
+# From Mimid; not used by STALAGMITE.
 ASCII_MAP = {
         '[__WHITESPACE__]': string.whitespace,
         '[__DIGIT__]': string.digits,
@@ -67,14 +68,6 @@ class LimitFuzzer(Fuzzer):
             else:
                 return [t, []]
 
-        cheap_grammar = {}
-        for k in self.cost:
-            # should we minimize it here? We simply avoid infinities
-            rules = self.grammar[k]
-            min_cost = min([self.cost[k][str(r)] for r in rules])
-            #grammar[k] = [r for r in grammar[k] if self.cost[k][str(r)] == float('inf')]
-            cheap_grammar[k] = [r for r in self.grammar[k] if self.cost[k][str(r)] == min_cost]
-
         root = [key, None]
         queue = [(0, root)]
         while queue:
@@ -82,8 +75,8 @@ class LimitFuzzer(Fuzzer):
             (depth, item), *queue = queue
             key = item[0]
             if item[1] is not None: continue
-            grammar = self.grammar if depth < max_depth else cheap_grammar
-            if first_choice:
+            grammar = self.grammar if depth < max_depth else self.cheap_grammar
+            if first_choice is not None:
                 chosen_rule = grammar[key][first_choice]
                 first_choice = None
             else:
@@ -122,6 +115,11 @@ class LimitFuzzer(Fuzzer):
         super().__init__(grammar)
         self.key_cost = {}
         self.cost = self.compute_cost(grammar)
+        self.cheap_grammar = {}
+        for k in self.cost:
+            rules = self.grammar[k]
+            min_cost = min([self.cost[k][str(r)] for r in rules])
+            self.cheap_grammar[k] = [r for r in self.grammar[k] if self.cost[k][str(r)] == min_cost]
 
     def compute_cost(self, grammar):
         cost = {}

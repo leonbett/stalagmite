@@ -4,6 +4,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 # Install prerequisites
 RUN apt update && \
 		apt install -y \
+			file \
 			build-essential \
 			curl \
 			libcap-dev \
@@ -28,7 +29,8 @@ RUN apt update && \
 			clang-11 \
 			llvm-11 \
 			llvm-11-dev \
-			llvm-11-tools && \
+			llvm-11-tools \
+			time && \
 		pip3 install \
 			wllvm \
 			z3-solver \
@@ -39,43 +41,49 @@ RUN apt update && \
 			tabulate && \
 		update-alternatives --install /usr/bin/python python /usr/bin/python3 1
 
-# Set up /staminag
-RUN mkdir /staminag
-ADD data /staminag/data
-# data_backup will be copied to data at the start during runtime, to expose this to the host
-# Reason: using -v will copy over host contents to container, deleting contents of data/
-ADD data /staminag/data_backup
-ADD eval /staminag/eval
-ADD generalize /staminag/generalize
-ADD subjects /staminag/subjects
-ADD config.py /staminag/config.py
-ADD common.py /staminag/common.py
-ADD klee.patch /staminag/klee.patch
+RUN mkdir /stalagmite
+ADD data /stalagmite/data
+ADD data /stalagmite/data_backup
+ADD eval /stalagmite/eval
+ADD subjects /stalagmite/subjects
+ADD system_level_grammar /stalagmite/system_level_grammar
+ADD config.py /stalagmite/config.py
+ADD common.py /stalagmite/common.py
+ADD docker_entrypoint.sh /stalagmite/docker_entrypoint.sh
+RUN chmod +x /stalagmite/docker_entrypoint.sh
+ADD klee.patch /stalagmite/klee.patch
+ADD klee-examples.commit /stalagmite/klee-examples.commit
+
+RUN chmod -R a+w /stalagmite
 
 # Set root directory
-RUN sed -i 's+root =.*+root = "/staminag"+g' /staminag/config.py
+RUN sed -i 's+root =.*+root = "/stalagmite"+g' /stalagmite/config.py
 
-ENV CPATH="/staminag/klee/include:$(CPATH)"
-ENV PATH="/staminag/:/staminag/generalize/:/staminag/klee/build/bin/:/usr/lib/llvm-11/bin/:${PATH}"
-ENV PYTHONPATH="/staminag:/staminag/generalize:${PYTHONPATH}"
+ENV CPATH="/stalagmite/klee/include"
+ENV PATH="/stalagmite/:/stalagmite/system_level_grammar/:/stalagmite/klee/build/bin/:/usr/lib/llvm-11/bin/:${PATH}"
+ENV PYTHONPATH="/stalagmite:/stalagmite/system_level_grammar:${PYTHONPATH}"
 
 # Set up klee
-RUN cd /staminag && \
+RUN cd /stalagmite && \
     git clone https://github.com/klee/klee.git && \
     cd klee && \
     git checkout fc778afc9029c48b78aa59c20cdf3e8223a88081 && \
-    git checkout -b staminag && \
-    git apply /staminag/klee.patch
+    git checkout -b stalagmite && \
+    git apply /stalagmite/klee.patch
 
 # Build klee-uclibc
-RUN cd /staminag && \
+RUN cd /stalagmite && \
     git clone https://github.com/klee/klee-uclibc.git && \
 	cd klee-uclibc && \
 	./configure --make-llvm-lib && \
 	make -j$(nproc)
 
+# Build klee-libcxx
+RUN cd /stalagmite/klee && \
+	LLVM_VERSION=11 SANITIZER_BUILD= BASE=/stalagmite/klee-libcxx REQUIRES_RTTI=1 DISABLE_ASSERTIONS=1 ENABLE_DEBUG=0 ENABLE_OPTIMIZED=1 ./scripts/build/build.sh libcxx
+
 # Build klee
-RUN cd /staminag/klee && \
+RUN cd /stalagmite/klee && \
 	mkdir build && \
 	cd build && \
 	cmake \
@@ -83,19 +91,15 @@ RUN cd /staminag/klee && \
 	  -DENABLE_SOLVER_Z3=ON \
 	  -DENABLE_POSIX_RUNTIME=ON \
 	  -DENABLE_KLEE_UCLIBC=ON \
-	  -DKLEE_UCLIBC_PATH=/staminag/klee-uclibc \
+	  -DKLEE_UCLIBC_PATH=/stalagmite/klee-uclibc \
 	  -DENABLE_UNIT_TESTS=OFF \
 	  -DLLVM_CONFIG_BINARY=/usr/lib/llvm-11/bin/llvm-config \
 	  -DLLVMCC=/usr/lib/llvm-11/bin/clang-11 \
 	  -DLLVMCXX=/usr/lib/llvm-11/bin/clang++ \
+	  -DENABLE_KLEE_LIBCXX=ON \
+	  -DKLEE_LIBCXX_DIR=/stalagmite/klee-libcxx/libc++-install-110/ \
+	  -DKLEE_LIBCXX_INCLUDE_DIR=/stalagmite/klee-libcxx/libc++-install-110/include/c++/v1/ \
 	  .. && \
 	make -j${nproc}
 
-# Run grammar mining
-CMD cp -rT /staminag/data_backup/ /staminag/data/ && \
-	cd /staminag/eval && \
-    ./tmux_mine_all.sh
-
-
-# => Data is available at /data/paper/accuracy/csv
-# => Run /staminag/eval/gen_tex_tables.py to generated accumulated data as .tex tables
+ENTRYPOINT ["/stalagmite/docker_entrypoint.sh"]

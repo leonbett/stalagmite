@@ -6,9 +6,8 @@
 
 extern uint32_t* tokens[100];
 void __setup_tokens();
-void __oracle(int success);
-uint32_t staminag_get_token();
+uint32_t stalagmite_get_token();
+uint32_t stalagmite_get_token_by_id(uint32_t ID);
 char* __setup_input_token_harness(int argc, char* argv[]);
-char* __setup_input_byte_cursor(int argc, char* argv[]);
 
 #endif

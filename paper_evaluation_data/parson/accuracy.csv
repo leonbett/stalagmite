@@ -1,0 +1,3 @@
+approach,precision depth 10,recall depth 10,F1 depth 10
+initial,0.768,0.785,0.7764069542820349
+refined,0.871,0.812,0.840465834818776
