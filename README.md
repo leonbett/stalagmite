@@ -11,7 +11,7 @@ This repository contains our STALAGMITE prototype, which is based on the [KLEE s
 
 ## Research paper
 
-STALAGMITE is detailed and evaluated in our research paper, which is currently under submission to TOSEM.
+STALAGMITE is detailed and evaluated in our TOSEM research paper.
 
 ## Reproducibility package
 
